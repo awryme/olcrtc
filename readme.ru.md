@@ -1,11 +1,21 @@
 <!-- If you are an AI agent, please read agents.md -->
 
-# olcRTC
+<h1 align="center">olcRTC</h1>
 
-**RU** / [EN](readme.md)
+<p align="center">
+  <b>Зашифрованный TCP-over-WebRTC туннель.</b><br>
+  Транспортный движок <a href="https://github.com/ghostlane-project/ghostlane">Ghostlane</a>: библиотека на Go и программа командной строки.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ghostlane-project/olcrtc?color=b5f23d&labelColor=07080d" alt="License: Apache-2.0"></a>
+  <img src="https://img.shields.io/github/go-mod/go-version/ghostlane-project/olcrtc/proofkit?label=go&color=b5f23d&labelColor=07080d" alt="Go version">
+</p>
+
+<p align="center"><b>RU</b> / <a href="readme.md">EN</a></p>
 
 
-`olcRTC` (OpenLibreCommunity RTC) - зашифрованный TCP-over-WebRTC туннель. Трафик маскируется под обычный видеозвонок на разрешённых сервисах (Jitsi, Yandex Telemost, WbStream, Sber SaluteJazz). Внутри - шифрование XChaCha20-Poly1305 и мультиплексирование smux поверх WebRTC data/video каналов.
+`olcRTC` (OpenLibreCommunity RTC) - зашифрованный TCP-over-WebRTC туннель. Трафик маскируется под обычный видеозвонок на разрешённых сервисах (Jitsi, Yandex Telemost, WbStream, Sber SaluteJazz, VK Calls). Внутри - шифрование XChaCha20-Poly1305 и мультиплексирование smux поверх WebRTC data/video каналов.
 
 Статус: **Beta**
 
@@ -40,6 +50,10 @@ app -> SOCKS5 -> olcrtc cnc -> WebRTC/SFU сервис -> olcrtc srv -> инте
 | Failover вслед за переезжающим сервером | Supervisor перечитывает список профилей на каждом переходе (`Config.Reload`; CLI перечитывает файл конфига) и ищет в нём тот профиль, который только что отработал, так что клиент идёт по скользящему окну комнат: комната, добавленная при живой сессии, берётся в тот момент, когда эта сессия кончается, без перезапуска, а комната, пропавшая из списка, переводит обход на новую голову, а не заканчивает проход. Комната, в которой никого нет - handshake не прошёл, и за это время оттуда не пришло ни одного кадра, - завершает запуск у клиента, которому есть куда пойти (`EndOnEmptyRoom`); молчащий, но присутствующий пир и клиент с единственной комнатой продолжают попытки. Control-стрим, закрытый пиром намеренно, завершает свою сессию сразу, не выжидая окно liveness, и не трогает комнату: такое же уведомление приходит от сервера, у которого перестроился собственный провайдер. IPv6-литералы отклоняются локально после нескольких отказов подряд, и это решение само истекает. |
 | Список запасных комнат на мобильных | `AddFailoverRoom` / `ClearFailoverRooms` рядом с `SetRoom`: рантайм проходит основную комнату и запасные под supervisor'ом, один проход, перечитывая список на каждом переходе, - хост может дописывать комнаты в живое поколение; проход заканчивается ошибкой, и дальше работает собственный цикл повторов хоста. От комнаты, где никого не оказалось, клиент отказывается только пока есть другая, и это считается в момент старта её запуска: единственная комната повторяется на месте ровно как до failover, а дописанная хостом комната действует со следующего старта. `SetSessionListener` называет комнату каждой открывшейся сессии - так хост, не читающий лог, отличает переезд от переподключения. |
 | Движок и auth-провайдер salutejazz | JSON-коннектор Sber SaluteJazz (LiveKit-as-JSON поверх pion). |
+| Движок и auth-провайдер vkcalls | VK Calls: вход гостем по ссылке на звонок, транспорт `vp8channel`. |
+| Профиль DTLS ClientHello | `dtls.profile`, на мобильных `SetDTLSProfile`. `off` (по умолчанию) оставляет рукопожатие библиотеки WebRTC; `chrome-linux-138-compat-v1` открывает соединение так же, как Chrome 138. Экспериментально: в Ghostlane это переключатель, по умолчанию выключен. |
+| Окно ретранслятора для SaluteJazz | LiveKit 1.5.3, на котором работает SaluteJazz, подтверждает сразу и копит очередь к каждому подписчику без предела, поэтому на медленном плече Сбера управляющие кадры туннеля ждали за окном потока данных, и проверка живости закрывала живые сессии. Теперь у каждого адресата своё окно: отправитель берёт лучшую скорость, которую плечо показало за последние десять секунд, и умножает на три секунды, от 16 до 192 КиБ. Окно включается, только если обе стороны отметили его в рукопожатии, так что старого пира обслуживают как раньше. |
+| Прямые правила на клиенте | `route.direct` / `route.direct_file`, а на мобильных `SetDirectRules`: адресаты, которых клиент открывает сам, а не через туннель, через тот же защищённый сокет, что и соединение с провайдером. Правила называют имена (`domain:`, `full:`) или адреса и подсети, в синтаксисе списков Xray. Для адреса, которого в правилах нет, клиент читает первые байты в поисках TLS server name или HTTP `Host`, так что даже tun2socks, отдающий одни адреса, маршрутизируется по имени. При `udp.enabled` датаграммы к адресату из списка тоже идут напрямую, а DNS-запрос к имени из списка уходит к резолверам самой сети, а не к выходу. Так режимы обхода Ghostlane маршрутизируют комнату olcRTC. Подробнее в [configuration.ru.md](docs/configuration.ru.md). |
 
 Кроме этого: клиент отличает старый пир, неверный ключ и пустую комнату друг от
 друга, а не отваливается по таймауту на всех трёх; нумерация записей и
@@ -53,7 +67,7 @@ IPv6-only оператору, и NAT64 в App Review.
 
 ## Возможности
 
-- **Провайдеры:** `jitsi`, `telemost`, `wbstream`, `salutejazz`
+- **Провайдеры:** `jitsi`, `telemost`, `wbstream`, `salutejazz`, `vkcalls`
 - **Транспорты:** `datachannel`, `vp8channel`, `seichannel`, `videochannel`
 - **Платформы:** Linux, macOS, Windows, Android (gomobile), встраиваемая Go-библиотека
 - **Публичные Go-пакеты:** `pkg/olcrtc/client`, `pkg/olcrtc/tunnel`, `pkg/olcrtc/engineconn`
@@ -102,7 +116,14 @@ mage mobile  # gomobile bindings (Android)
 - Основной клиент:
   - [owenewans/owenclave](https://github.com/owenewans/owenclave) - Android-клиент прокси (форк exclave). Поддерживает все распространённые протоколы (vless, hysteria2, mieru, trojan, vmess, tuic, shadowsocks, socks ...) плюс `olcrtc`, формат URI `olcrtc://` и подписки
 - Клиент этого форка:
-  - [ghostlane-project/ghostlane](https://github.com/ghostlane-project/ghostlane) - Ghostlane, форк olcbox из списка ниже. Kotlin Multiplatform/Compose для Android, iOS, macOS, Windows и Linux; olcRTC рядом с VLESS Reality, VLESS поверх TLS, Hysteria2 и XHTTP - тот клиент, ради которого сделано всё перечисленное выше
+  - [ghostlane-project/ghostlane](https://github.com/ghostlane-project/ghostlane) - Ghostlane, форк olcbox из списка ниже. Kotlin Multiplatform/Compose для Android, iOS, macOS, Windows и Linux; olcRTC рядом с VLESS (Reality или TLS), Hysteria2, XHTTP, Trojan, Shadowsocks и VMess - тот клиент, ради которого сделано всё перечисленное выше
+
+    <a href="https://apps.apple.com/app/id6795355210"><img src="docs/badges/app-store-badge.svg" alt="Download on the App Store" width="168" align="middle"></a>
+    &nbsp;
+    <a href="https://play.google.com/store/apps/details?id=org.proofkit.app"><img src="docs/badges/google-play-badge.png" alt="Get it on Google Play" width="217" align="middle"></a>
+
+    Сборки для компьютеров и APK для Android: [GitHub Releases](https://github.com/ghostlane-project/ghostlane/releases).
+
 - Клиенты сообщества:
   - [venterum/veil](https://github.com/venterum/veil) - V2Ray/Xray клиент для Android (форк v2rayNG), Material 3. Протоколы: VMess, VLESS, Shadowsocks, Trojan, SOCKS, WireGuard, Hysteria2 + `olcrtc`
   - [alananisimov/olcbox](https://github.com/alananisimov/olcbox) - Мультиплатформенный UI-клиент (Android, iOS, macOS, Windows, Linux). Kotlin Multiplatform/Compose. Все провайдеры (Jitsi, Telemost, WB Stream, Jazz), все транспорты, split tunneling, режимы TUN/proxy
@@ -128,3 +149,5 @@ Apache License 2.0, см. [LICENSE](LICENSE).
 [docs/upstream-license-wtfpl.txt](docs/upstream-license-wtfpl.txt), происхождение и лицензии зависимостей
 описаны в [NOTICE](NOTICE).
 
+App Store — товарный знак Apple Inc., зарегистрированный в США и других
+странах. Google Play и логотип Google Play — товарные знаки Google LLC.

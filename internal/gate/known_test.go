@@ -221,9 +221,9 @@ func TestAWrittenReportCarriesTheIssueAndTheKnownCount(t *testing.T) {
 }
 
 // TestSaluteJazzIsKnownOnlyForItsBulkCells pins the list for salutejazz
-// once the relay window is in (olcrtc#49): S2, download saturation, of
-// either flavour stays known, for what a slow Sber leg still costs it, and
-// every other salutejazz cell (connect, upload saturation, burst, quiet,
+// once the relay window is in (olcrtc#49): S2 and S3, download and upload
+// saturation, of either flavour stay known, for what a slow Sber leg still
+// costs them, and every other salutejazz cell (connect, burst, quiet,
 // resolver, memory) blocks again.
 // ai-generated: this test (the narrowed known list).
 func TestSaluteJazzIsKnownOnlyForItsBulkCells(t *testing.T) {
@@ -238,7 +238,7 @@ func TestSaluteJazzIsKnownOnlyForItsBulkCells(t *testing.T) {
 			continue
 		}
 		k, known := knownFailure(c.ID)
-		want := c.Scenario == "S2"
+		want := c.Scenario == "S2" || c.Scenario == "S3"
 		switch {
 		case known != want:
 			t.Errorf("%s: known %t, want %t", c.ID, known, want)
@@ -252,7 +252,7 @@ func TestSaluteJazzIsKnownOnlyForItsBulkCells(t *testing.T) {
 			bulk[c.Scenario]++
 		}
 	}
-	if bulk["S2"] == 0 {
-		t.Fatalf("known bulk cells %v: the plan has no salutejazz S2 to hold the list to", bulk)
+	if bulk["S2"] == 0 || bulk["S3"] == 0 {
+		t.Fatalf("known bulk cells %v: the plan has no salutejazz S2 or S3 to hold the list to", bulk)
 	}
 }
