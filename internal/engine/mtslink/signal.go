@@ -10,93 +10,169 @@ import (
 	"strings"
 )
 
-// The MTS Link SFU speaks SDP over plain HTTP (measured 2026-10-10, live):
-// one POST exchanges an offer for an answer, and the peer the answer names is
-// pinned by its session id. No WebSocket, no trickle — the SDPs carry their
-// candidates inline, as the engine's other carriers work.
+// MTS Link's SFU ("odin" in its answers) speaks SDP over plain HTTP, measured
+// against the live service on 2026-10-11:
 //
-// docs: proofkit-dvpn docs/superpowers/specs/2026-10-11-olcrtc-mtslink-engine-design.md
+//	POST {join}                      the offer in, the answer out
+//	POST {origin}/rtc/peer/{id}/pin  {"streams":[""]}, the web client's call
+//	                                 after every join; the peer is the
+//	                                 answer's s= line
+//
+// No WebSocket and no trickle: the answer carries the SFU's candidates and
+// the guest's reach it as peer-reflexive ones. The SFU authenticates by the
+// join's own tokens and reads no cookie.
 
 var (
-	// ErrNoAnswer is a join that answered anything but an SDP answer.
+	// ErrJoinRefused is the SFU answering the join with anything but 200. Its
+	// body names the rule the offer broke ("SDP validation error: ...") and
+	// rides along; it is the SFU's text about our SDP, never a credential.
+	ErrJoinRefused = errors.New("mtslink: the SFU refused the join")
+	// ErrNoAnswer is a join that answered 200 and no SDP.
 	ErrNoAnswer = errors.New("mtslink: the room join did not answer an SDP")
-	// ErrPeerUnpinned is a pin the SFU refused; the join is worthless then.
-	ErrPeerUnpinned = errors.New("mtslink: the SFU refused the peer pin")
-	// ErrBadStatus wraps every unexpected HTTP status the SFU answered.
-	ErrBadStatus = errors.New("mtslink: unexpected status")
+	// ErrNoPeerID is an answer that names no peer.
+	ErrNoPeerID = errors.New("mtslink: the answer named no peer")
 )
 
-// maxSignalBody bounds what a signaling reply may be; an SDP answer is a few
-// kilobytes, and anything larger is not one.
-const maxSignalBody = 1 << 20
+const (
+	// maxSignalBody bounds a signaling reply: an answer to the fourteen
+	// sections the web client offers is forty kilobytes.
+	maxSignalBody = 1 << 20
+	// maxRefusalText is how much of a refusal's body an error carries.
+	maxRefusalText = 200
+	// pinNothing is the body of the pin the web client sends after a join:
+	// no stream held in a slot, the SFU fills them as it sees fit.
+	pinNothing = `{"streams":[""]}`
+	// publishCodec is what the join asks the SFU to take from the published
+	// track, in the service's own spelling.
+	publishCodec = "vp9"
+)
 
-// joinOffer POSTs the offer to the room join URL with the guest's cookies and
-// returns the answer's SDP. The web client sends the offer as the bare body;
-// the content type it used was not captured, so `application/sdp` rides along
-// and the SFU takes the body either way (measured: it did).
-func joinOffer(ctx context.Context, client *http.Client, joinURL, cookies, offer string) (string, error) {
+// offerURL is the provider's room join with what describes the offer added:
+// the transport-wide congestion feedback the offer carries, the m-line the
+// SFU sends the room's audio on, and the codec of the published track.
+func offerURL(join, audioPlayerMid string) (string, error) {
+	u, err := url.Parse(join)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", fmt.Errorf("%w: the join URL does not parse", ErrNoEndpoint)
+	}
+	q := u.Query()
+	q.Set("twcc", "true")
+	q.Set("originMid", audioPlayerMid)
+	q.Set("preferredPublishCodec", publishCodec)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+// joinOffer POSTs the offer and returns the answer's SDP.
+func joinOffer(ctx context.Context, client *http.Client, joinURL, offer string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL, strings.NewReader(offer))
 	if err != nil {
 		return "", fmt.Errorf("mtslink: join request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/sdp")
-	if cookies != "" {
-		req.Header.Set("Cookie", cookies)
-	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("mtslink: join send: %w", err)
+		return "", fmt.Errorf("mtslink: join: %w", redactURL(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxSignalBody))
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("join: %w %d", ErrBadStatus, resp.StatusCode)
+		return "", fmt.Errorf("%w: status %d: %s", ErrJoinRefused, resp.StatusCode, refusalText(body))
 	}
 	answer := string(body)
-	if !strings.Contains(answer, "v=0") {
+	if !strings.HasPrefix(answer, "v=0") {
 		return "", ErrNoAnswer
 	}
 	return answer, nil
 }
 
-// pinPeer pins the peer the answer named (its SDP session id, `s=`): the call
-// the web client always makes after a join, and without which the SFU drops
-// the media. The URL the answer's pin used was the join URL's host with the
-// peer path, so the pin is built from the join URL's own origin.
-func pinPeer(ctx context.Context, client *http.Client, joinURL, peerID, cookies string) error {
-	origin, err := url.Parse(joinURL)
-	if err != nil || origin.Scheme == "" || origin.Host == "" {
-		return fmt.Errorf("pin url: %w: %w", ErrBadStatus, err)
+// refusalText is the first line of a refusal, bounded and printable.
+func refusalText(body []byte) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(string(body)), "\n")
+	line = strings.Map(func(r rune) rune {
+		if r < ' ' || r == 0x7f {
+			return -1
+		}
+		return r
+	}, line)
+	if len(line) > maxRefusalText {
+		line = line[:maxRefusalText]
 	}
-	pinURL := origin.Scheme + "://" + origin.Host + "/rtc/peer/" + peerID + "/pin"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, pinURL, http.NoBody)
+	return line
+}
+
+// redactURL keeps a transport error's reason and drops its URL: the join's
+// carries both of the guest's tokens.
+func redactURL(err error) error {
+	var uerr *url.Error
+	if errors.As(err, &uerr) {
+		return fmt.Errorf("%s: %w", uerr.Op, uerr.Err)
+	}
+	return err
+}
+
+// peerOf is the peer an answer names: its session name, the `s=` line. The id
+// goes into a path, so one that could not be a path segment is none.
+func peerOf(answer string) string {
+	for _, line := range strings.Split(answer, "\n") {
+		id, ok := strings.CutPrefix(strings.TrimSpace(line), "s=")
+		if !ok {
+			continue
+		}
+		if id == "" || id == "-" || strings.ContainsAny(id, "/?#% \t") {
+			return ""
+		}
+		return id
+	}
+	return ""
+}
+
+// pinPeer sends the pin the web client sends after a join. The media flows
+// without it (measured), so the caller treats a failure as a note, not as a
+// join that failed.
+func pinPeer(ctx context.Context, client *http.Client, joinURL, peerID string) error {
+	u, err := url.Parse(joinURL)
+	if err != nil {
+		return fmt.Errorf("mtslink: pin url: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		u.Scheme+"://"+u.Host+"/rtc/peer/"+peerID+"/pin", strings.NewReader(pinNothing))
 	if err != nil {
 		return fmt.Errorf("mtslink: pin request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("mtslink: pin: %w", redactURL(err))
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxSignalBody))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("mtslink: pin: status %d", resp.StatusCode) //nolint:err113 // a note for the log, matched by nobody
+	}
+	return nil
+}
+
+// takeBack removes the guest's conference from the room's list: DELETE
+// {gateway}/api/conferences/{id} with the guest's cookies (204, measured).
+// The service does it by itself for a publisher that was on the SFU and
+// left; a conference whose join never got there stays until this is called.
+func takeBack(ctx context.Context, client *http.Client, gateway, conferenceID, cookies string) error {
+	if gateway == "" || conferenceID == "" || strings.Trim(conferenceID, "0123456789") != "" {
+		return nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, gateway+"/api/conferences/"+conferenceID, http.NoBody)
+	if err != nil {
+		return fmt.Errorf("mtslink: leave request: %w", err)
 	}
 	if cookies != "" {
 		req.Header.Set("Cookie", cookies)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("mtslink: pin send: %w", err)
+		return fmt.Errorf("mtslink: leave: %w", redactURL(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxSignalBody))
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%w: status %d", ErrPeerUnpinned, resp.StatusCode)
-	}
 	return nil
-}
-
-// sdpSessionID reads the `s=` line out of an SDP: the SFU's peer id, which the
-// web client's own pin call used verbatim (measured: the answer's `s=` value
-// and the peer path's id were one and the same).
-func sdpSessionID(sdp string) string {
-	for _, line := range strings.Split(sdp, "\n") {
-		line = strings.TrimSpace(line)
-		if v, ok := strings.CutPrefix(line, "s="); ok {
-			return strings.TrimSpace(v)
-		}
-	}
-	return ""
 }

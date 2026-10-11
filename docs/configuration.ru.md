@@ -52,7 +52,7 @@ olcrtc /etc/olcrtc/client.yaml
 | YAML path | Значение |
 |---|---|
 | `mode` | `srv`, `cnc` или `gen` |
-| `auth.provider` | `jitsi`, `telemost`, `wbstream`, `salutejazz`, `vkcalls`, `none` |
+| `auth.provider` | `jitsi`, `telemost`, `wbstream`, `salutejazz`, `vkcalls`, `mtslink`, `none` |
 | `auth.token` | необязательный заранее выданный токен аккаунта провайдера |
 | `room.id` | ID/URL комнаты для выбранного провайдера |
 | `room.channel` | необязательный ID канала для peer-routing сценариев |
@@ -259,7 +259,10 @@ failover:
 Остальные не создают комнаты через `olcrtc`: для `telemost` и `wbstream` создай
 комнату на сайте сервиса и вставь её в `room.id`; для `jitsi` укажи URL комнаты;
 для `vkcalls` создай звонок в приложении VK и вставь ссылку входа
-(`https://vk.ru/call/join/<id>`) — `room.id` принимает её как есть.
+(`https://vk.ru/call/join/<id>`) — `room.id` принимает её как есть;
+для `mtslink` создай постоянную встречу в кабинете MTS Link и вставь ссылку
+входа (`https://my.mts-link.ru/j/<owner>/<event>`): гость входит в неё без
+организатора внутри.
 
 Свежая комната VK держит первых участников в топологии DIRECT: двое сами её
 не переключают, третий одновременный участник — переключает, и после этого

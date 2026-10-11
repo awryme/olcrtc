@@ -52,7 +52,7 @@ Ready-made examples:
 | YAML path | Meaning |
 |---|---|
 | `mode` | `srv`, `cnc` or `gen` |
-| `auth.provider` | `jitsi`, `telemost`, `wbstream`, `salutejazz`, `vkcalls`, `none` |
+| `auth.provider` | `jitsi`, `telemost`, `wbstream`, `salutejazz`, `vkcalls`, `mtslink`, `none` |
 | `auth.token` | optional pre-issued provider account token |
 | `room.id` | room ID/URL for the chosen provider |
 | `room.channel` | optional channel ID for peer-routing scenarios |
@@ -259,7 +259,10 @@ with a single anonymous POST and prints it as `<code>:<password>`, which is what
 The others do not create rooms through `olcrtc`: for `telemost` and `wbstream`
 create the room on the service site and paste it into `room.id`; for `jitsi`
 specify the room URL; for `vkcalls` create the call in the VK app and paste
-its join link (`https://vk.ru/call/join/<id>`) — `room.id` takes it verbatim.
+its join link (`https://vk.ru/call/join/<id>`) — `room.id` takes it verbatim;
+for `mtslink` create an endless meeting («постоянная встреча») in the MTS Link
+cabinet and paste its join link (`https://my.mts-link.ru/j/<owner>/<event>`),
+which a guest enters with no organizer inside.
 
 A fresh VK room keeps its first participants in DIRECT topology: two alone
 never switch it, a third simultaneous participant does, and SERVER sticks

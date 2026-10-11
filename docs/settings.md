@@ -16,12 +16,18 @@
 
 ## Compatibility matrix
 
-| Transport | telemost | wbstream | jitsi | salutejazz | vkcalls |
-|-----------|:--------:|:--------:|:-----:|:----------:|:-------:|
-| datachannel | - | ~ | + | + | - |
-| vp8channel | + | + | + | - | + |
-| seichannel | - | + | + | - | - |
-| videochannel | + | + | + | - | - |
+| Transport | telemost | wbstream | jitsi | salutejazz | vkcalls | mtslink |
+|-----------|:--------:|:--------:|:-----:|:----------:|:-------:|:-------:|
+| datachannel | - | ~ | + | + | - | - |
+| vp8channel | + | + | + | - | + | + |
+| seichannel | - | + | + | - | - | - |
+| videochannel | + | + | + | - | - | - |
+
+`mtslink` carries vp8channel alone, and not as VP8: MTS Link's SFU relays no
+data between guests and forwards VP9 and H264 only, so the transport dresses
+its frames as VP9 there (each opens with a real VP9 keyframe, which is what
+the SFU forwards from) - 15 Mbit/s down and 16 up at the release gate.
+
 
 `salutejazz` carries bytes on the room's data channels only: it exchanges no
 video tracks, so the three video transports refuse it. `vkcalls` is the
