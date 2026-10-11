@@ -119,7 +119,7 @@ func roomJoinURL(server, session, userID, nickname, joinToken, publishToken stri
 	q := url.Values{}
 	q.Set("userId", userID)
 	q.Set("joinToken", joinToken)
-	q.Set("disableRecording", "true")
+	q.Set("disableRecording", yes)
 	q.Set("userName", nickname)
 	q.Set("publishToken", publishToken)
 	q.Set("did", did)

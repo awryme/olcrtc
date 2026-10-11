@@ -37,6 +37,9 @@ const (
 	// event's public record, a few kilobytes.
 	replyLimit = 1 << 20
 	formType   = "application/x-www-form-urlencoded"
+	// yes and no are how the service's forms and queries spell a flag.
+	yes = "true"
+	no  = "false"
 )
 
 var (
@@ -266,7 +269,7 @@ func newConference(ctx context.Context, client *http.Client, gateway, session st
 	raw, _, err := call{
 		name: "conferences", method: http.MethodPost,
 		url:  gateway + "/api/eventsessions/" + session + "/conferences",
-		form: url.Values{"hasAudio": {"false"}, "hasVideo": {"true"}},
+		form: url.Values{"hasAudio": {no}, "hasVideo": {yes}},
 		want: http.StatusCreated,
 	}.do(ctx, client, g.cookies)
 	if err != nil {
