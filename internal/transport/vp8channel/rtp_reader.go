@@ -233,13 +233,11 @@ func (s *vp8FrameState) processRTPPacket(pkt *rtp.Packet) []byte {
 }
 
 func (p *streamTransport) handleRemoteTrack(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
-	switch {
-	case track.Codec().MimeType == webrtc.MimeTypeVP8:
-	case strings.EqualFold(track.Codec().MimeType, mimeTypeRED):
-		// A VK Calls SFU forwards camera video wrapped in RFC 2198 RED even
-		// when the publisher sent no redundancy; the primary block is the
-		// VP8 packet this transport assembles.
-	default:
+	// The carrier's own codec is read. On VP8 that includes RED: a VK Calls
+	// SFU forwards camera video wrapped in RFC 2198 RED even when the
+	// publisher sent no redundancy, and the primary block is the VP8 packet
+	// this transport assembles.
+	if !p.carrier.accepts(track.Codec().MimeType) {
 		go p.drainTrack(track)
 		return
 	}
@@ -265,7 +263,7 @@ const mimeTypeRED = "video/red"
 
 func (p *streamTransport) readVP8Track(track *webrtc.TrackRemote) {
 	red := strings.EqualFold(track.Codec().MimeType, mimeTypeRED)
-	var state vp8FrameState
+	state := p.carrier.assembler()
 	reorder := newReorderBuffer()
 	buf := make([]byte, rtpBufSize)
 	var rtpCount, frameCount int

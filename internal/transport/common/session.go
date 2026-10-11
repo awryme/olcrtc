@@ -74,6 +74,39 @@ func PublishRateLimit(session any) int {
 	return limited.PublishRateLimit()
 }
 
+// VideoCodec forwards the codec the engine's service takes, "" when the
+// engine names none and the transport's own applies.
+func (v *EngineVideoSession) VideoCodec() string {
+	return VideoCodec(v.session)
+}
+
+// VideoCodec reads the codec a session names for published video, "" for a
+// session that names none.
+func VideoCodec(session any) string {
+	selector, ok := session.(engine.VideoCodecSelector)
+	if !ok {
+		return ""
+	}
+	return selector.VideoCodec()
+}
+
+// SetKeyframeRequestHandler forwards cb to an engine that reports its relay's
+// keyframe requests, and says whether it does.
+func (v *EngineVideoSession) SetKeyframeRequestHandler(cb func()) bool {
+	return OnKeyframeRequest(v.session, cb)
+}
+
+// OnKeyframeRequest registers cb with a session that reports keyframe
+// requests and says whether it is one.
+func OnKeyframeRequest(session any, cb func()) bool {
+	source, ok := session.(engine.KeyframeRequestSource)
+	if !ok {
+		return false
+	}
+	source.SetKeyframeRequestHandler(cb)
+	return true
+}
+
 // Connect brings up the underlying engine session.
 func (v *EngineVideoSession) Connect(ctx context.Context) error {
 	if err := v.session.Connect(ctx); err != nil {
