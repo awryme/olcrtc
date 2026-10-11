@@ -9,7 +9,7 @@ package client_test
 // livekit is what olcbox#22 was, and the wbstream provider it serves stopped
 // working.
 func expectedEngines() []string {
-	return []string{"goolom", "jitsi", "livekit", "salutejazz", "vkcalls"}
+	return []string{"goolom", "jitsi", "livekit", "mtslink", "salutejazz", "vkcalls"}
 }
 
 func expectedTransports() []string { return []string{"datachannel", "seichannel", "vp8channel"} }
