@@ -33,7 +33,7 @@ go test -count=1 -tags olcrtc_lean -timeout 45m ./internal/gate -run '^TestGate$
 ```
 
 - `-olcrtc.gate-dry` prints the plan, one cell id per line, and runs nothing. On the local target it needs no room and no token; the link target still needs the link, whose pair it plans.
-- Jitsi and SaluteJazz need no secret. Telemost and WB Stream need pre-made rooms, WB Stream also an account token: see [Rooms and secrets](#rooms-and-secrets). Put them in the environment, for example from a file outside the repository (`set -a; . ~/gate.env; set +a`), not on the command line.
+- Jitsi and SaluteJazz need no secret. Telemost, VK Calls and MTS Link need pre-made rooms; WB Stream, walked only when named, needs rooms and an account token: see [Rooms and secrets](#rooms-and-secrets). Put them in the environment, for example from a file outside the repository (`set -a; . ~/gate.env; set +a`), not on the command line.
 - The local target builds `cmd/olcrtc` with `-tags olcrtc_testhooks`, so `go` must be on `PATH`.
 - The run ends 90 s before the `go test` deadline, so the report is written even when time runs out; cells it did not reach fail as not run. Give `-timeout` well above the run: the default 10 m cuts most runs short. A `-timeout` that leaves no more than 90 s is refused.
 - Against a fleet node: `-olcrtc.gate-target=link` with the `olcrtc://` link in `OLCRTC_GATE_LINK`. The server is the node's; the load goes to public URLs (`-olcrtc.gate-link-small`, `-olcrtc.gate-link-big`, `-olcrtc.gate-link-sink`), and the run writes no logs.
@@ -45,11 +45,12 @@ go test -count=1 -tags olcrtc_lean -timeout 45m ./internal/gate -run '^TestGate$
 | `-olcrtc.gate` | off | run the gate |
 | `-olcrtc.gate-target` | `local` | `local`: a child server per pair; `link`: the server behind an `olcrtc://` link |
 | `-olcrtc.gate-dir` | `gate-artifacts` | where the report and the scrubbed logs go; a relative path is taken from the module root |
-| `-olcrtc.gate-providers` | `jitsi,telemost,wbstream,salutejazz` | providers of the local target, run one after another |
+| `-olcrtc.gate-providers` | `jitsi,telemost,mtslink,salutejazz,vkcalls` | providers of the local target, run one after another. `wbstream` is carried and left out of the default: the service closed its beta to its own staff on 2026-10-10 and answers every join 401, so it runs only when named |
 | `-olcrtc.gate-transports` | `datachannel,seichannel,vp8channel` | transports of the local target, see [Pairs](#pairs); `videochannel` runs only when named |
 | `-olcrtc.gate-clients` | the build's own | `cli` in a default build, `mobile` in an `olcrtc_lean` one, one flavour per process |
 | `-olcrtc.gate-telemost-rooms` | empty | Telemost pool; else `OLCRTC_GATE_TELEMOST_ROOMS` |
 | `-olcrtc.gate-vkcalls-rooms` | empty | VK Calls pool, join links; else `OLCRTC_GATE_VKCALLS_ROOMS` |
+| `-olcrtc.gate-mtslink-rooms` | empty | MTS Link pool, event join links; else `OLCRTC_GATE_MTSLINK_ROOMS` |
 | `-olcrtc.gate-wbstream-rooms` | empty | WB Stream pool; else `OLCRTC_GATE_WBSTREAM_ROOMS` |
 | `-olcrtc.gate-jitsi-hosts` | empty | Jitsi hosts used instead of the instance list; else `OLCRTC_GATE_JITSI_HOSTS` |
 | `-olcrtc.gate-jitsi-instances` | `docs/jitsi.instances.yaml` | the Jitsi instance list; a relative path is taken from the module root |
@@ -67,6 +68,8 @@ The environment:
 | Variable | Meaning |
 |---|---|
 | `OLCRTC_GATE_TELEMOST_ROOMS` | Telemost pool, when its flag is empty |
+| `OLCRTC_GATE_VKCALLS_ROOMS` | VK Calls pool, when its flag is empty |
+| `OLCRTC_GATE_MTSLINK_ROOMS` | MTS Link pool, when its flag is empty |
 | `OLCRTC_GATE_WBSTREAM_ROOMS` | WB Stream pool, when its flag is empty |
 | `OLCRTC_GATE_WBSTREAM_TOKEN` | WB Stream account token of the local server; it has no flag |
 | `OLCRTC_GATE_JITSI_HOSTS` | Jitsi hosts, when their flag is empty |
@@ -81,7 +84,7 @@ A flag shows in the process list and the shell history, so rooms, the token and 
 
 - **Jitsi.** Each pair gets a fresh room, `https://<host>/gate-<12 hex>`, on the first host that answers one HTTPS request within 5 s. The hosts come from the instance list, or from the override when it names any. An override entry is a bare host or a URL; only its host is used.
 - **SaluteJazz.** Each pair gets a fresh room, `<code>:<password>`, from Sber's anonymous create-meeting call, the one the engine's own `salutejazz` auth provider makes. It takes no account and no token, and nothing gives a room back: Sber has no delete, so a run leaves its rooms behind. A create that fails is a server that did not come up.
-- **Telemost and WB Stream.** The gate creates neither provider's rooms, so each has a pool of pre-made ones. Entries are separated by commas or line breaks, trimmed, and blank ones dropped. A run takes entry `run_number mod len(pool)`, so runs in sequence take turns.
+- **Telemost, VK Calls, MTS Link and WB Stream.** The gate creates none of these providers' rooms, so each has a pool of pre-made ones. An MTS Link entry is the join link of an endless meeting («постоянная встреча»), which a guest enters with no organizer inside. Entries are separated by commas or line breaks, trimmed, and blank ones dropped. A run takes entry `run_number mod len(pool)`, so runs in sequence take turns.
 - **WB Stream token.** WB refuses a guest as the first participant of an idle room (`403 guests cannot create rooms`), so the local server signs in with the account token from `OLCRTC_GATE_WBSTREAM_TOKEN`. The client stays a guest, as the app is. Without the token every wbstream cell fails with a reason that names the variable.
 - **Per pair.** A fresh 64-hex key and a fresh channel id `gate-<12 hex>`, so two runs in one pool room never read each other's frames.
 - **Kept private.** The server's YAML (room, key, token) and its raw log stay in a temporary directory. `-olcrtc.gate-dir` gets scrubbed copies only.
@@ -93,6 +96,8 @@ Pool entries:
 | Telemost | `<id>` | `https://telemost.yandex.ru/j/<id>` |
 | Telemost | `https://telemost.yandex.ru/j/<id>` | the URL as given |
 | Telemost | an `http://` URL, or a URL without a scheme | the same URL with `https://` |
+| VK Calls | `https://vk.ru/call/join/<id>` | the link as given |
+| MTS Link | `https://my.mts-link.ru/j/<owner>/<event>` | the link as given |
 | WB Stream | `<id>` | `<id>` |
 | WB Stream | `https://stream.wb.ru/room/<id>`, with or without the scheme | `<id>`, the last path segment; a query or fragment is dropped |
 
@@ -103,8 +108,9 @@ Secrets of the engine repository (Settings > Secrets and variables > Actions) fo
 | Secret | Required | Reaches `go test` as | Value |
 |---|---|---|---|
 | `GATE_TELEMOST_ROOMS` | yes | `OLCRTC_GATE_TELEMOST_ROOMS` | Telemost pool: ids or room URLs |
-| `GATE_WBSTREAM_ROOMS` | yes | `OLCRTC_GATE_WBSTREAM_ROOMS` | WB Stream pool: ids or room URLs |
-| `GATE_WBSTREAM_TOKEN` | yes | `OLCRTC_GATE_WBSTREAM_TOKEN` | WB Stream account access token |
+| `GATE_MTSLINK_ROOMS` | yes | `OLCRTC_GATE_MTSLINK_ROOMS` | MTS Link pool: event join links (https://my.mts-link.ru/j/<owner>/<event>) of endless meetings. In the default walk since 2026-10-11, after the engine's live validation |
+| `GATE_WBSTREAM_ROOMS` | no | `OLCRTC_GATE_WBSTREAM_ROOMS` | WB Stream pool: ids or room URLs. Read when `wbstream` is named in `-olcrtc.gate-providers` |
+| `GATE_WBSTREAM_TOKEN` | no | `OLCRTC_GATE_WBSTREAM_TOKEN` | WB Stream account access token, read with the pool |
 | `GATE_JITSI_HOSTS` | no | `OLCRTC_GATE_JITSI_HOSTS` | Jitsi hosts; empty means the instance list |
 | `GATE_VKCALLS_ROOMS` | no | `OLCRTC_GATE_VKCALLS_ROOMS` | VK Calls pool: room URLs (https://vk.ru/call/join/<id>). Read when the `vkcalls` provider is named in `-olcrtc.gate-providers`; it is in the default walk since 2026-09-28, after the engine's live validation (19 Mbit/s both ways, S0-S7) |
 
@@ -119,6 +125,8 @@ The local target crosses the providers with the transports in the order given an
 | `jitsi` | `datachannel`, `videochannel`, `seichannel`, `vp8channel` |
 | `telemost` | `vp8channel`, `videochannel` (Telemost drops SCTP, and seichannel fails there by design) |
 | `wbstream` | `vp8channel`, `videochannel`, `seichannel` (WB guests cannot publish data) |
+| `vkcalls` | `vp8channel`, `videochannel` (the SFU bridges no data between guests) |
+| `mtslink` | `vp8channel` (the SFU relays no data between guests and forwards VP9 and H264, never VP8: `vp8channel` dresses its frames as VP9 for it, the other video transports publish what it does not take) |
 | `salutejazz` | `datachannel` (Sber admits a guest to the room's data channels only, never to a media track) |
 
 Left at its default, `-olcrtc.gate-transports` runs `datachannel`, `seichannel` and `vp8channel`, those of them some provider carries. `videochannel` runs only when named: it sends one 256-byte fragment a frame at 30 fps, about 7.5 KiB/s, so S0's 10 MiB pull alone would outlast the cell's 5 min. A list given on the command line is taken as it is: an unknown name, a transport this build does not link (the lean build has no `videochannel`) or no provider carries, and a provider left with none are plan errors. The link target has one pair, the link's.
@@ -145,7 +153,7 @@ The client flavours, one per process:
 | S6 | late server bridge | a fresh server whose Jitsi bridge opens 3 s late, then one 8 s late (olcbox#22) | the client ready no sooner than the delay, the proof the bridge was late, and within the delay plus the handshake budget | local target, `jitsi/datachannel`, both flavours |
 | S7 | phone memory | peak heap and RSS from S2's start to S4's end over the baseline read before the client started; goroutines before S1 and at S4's end | `heap_growth_bytes`, `rss_growth_bytes`, `goroutine_growth` | load pairs, `mobile` |
 
-Load pairs are `jitsi/datachannel`, `telemost/vp8channel`, `wbstream/vp8channel` and `salutejazz/datachannel` on the local target, the link's pair on the link target. The big pull is `-olcrtc.gate-big-mb` MiB. The scenarios of a client run in order on one tunnel. S6 delays the bridge through `OLCRTC_TEST_BRIDGE_DELAY`, which only a server built with `olcrtc_testhooks` reads; a release build has no such hook. Such a server also reads `OLCRTC_TEST_PROVIDER_DROP_AFTER`, a Go duration: that long after it joins, it drops its provider once and rebuilds it, as a relay that cuts its connection makes it do (olcrtc#19). No scenario sets it; the server takes it from the environment of the run. The local target starts every server with `OLCRTC_TEST_ALLOW_PRIVATE_TARGETS=1` as well: the origin the client pulls from is on loopback, which a server's egress policy refuses, and only such a server lifts the policy for it.
+Load pairs are `jitsi/datachannel`, `telemost/vp8channel`, `mtslink/vp8channel`, `salutejazz/datachannel` and `vkcalls/vp8channel` (and `wbstream/vp8channel` when it is named) on the local target, the link's pair on the link target. The big pull is `-olcrtc.gate-big-mb` MiB. The scenarios of a client run in order on one tunnel. S6 delays the bridge through `OLCRTC_TEST_BRIDGE_DELAY`, which only a server built with `olcrtc_testhooks` reads; a release build has no such hook. Such a server also reads `OLCRTC_TEST_PROVIDER_DROP_AFTER`, a Go duration: that long after it joins, it drops its provider once and rebuilds it, as a relay that cuts its connection makes it do (olcrtc#19). No scenario sets it; the server takes it from the environment of the run. The local target starts every server with `OLCRTC_TEST_ALLOW_PRIVATE_TARGETS=1` as well: the origin the client pulls from is on loopback, which a server's egress policy refuses, and only such a server lifts the policy for it.
 
 A cell has 5 min, S2 and S3 have 10. A server that did not come up gets one more try 30 s later (a missing token or pool room gets none), then its cells fail with the reason and the server's last log line, usually the provider's answer; a client that did not come up fails its cells too. Cells are not retried: a flake under load is a finding.
 

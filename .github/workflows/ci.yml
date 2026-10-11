@@ -227,10 +227,13 @@ jobs:
     # green: here every planned cell ends pass or fail.
     #
     # Secrets reach go test through step env only, never argv or script text
-    # (amendment A7). GATE_TELEMOST_ROOMS and GATE_WBSTREAM_ROOMS (pools of
-    # room ids or URLs, comma-separated) and GATE_WBSTREAM_TOKEN are
+    # (amendment A7). GATE_TELEMOST_ROOMS (a pool of room ids or URLs,
+    # comma-separated) and GATE_MTSLINK_ROOMS (a pool of event join links) are
     # required; GATE_JITSI_HOSTS is optional, empty means the instance list.
     # Jitsi and SaluteJazz rooms are made fresh per pair and need no secret.
+    # GATE_WBSTREAM_ROOMS and GATE_WBSTREAM_TOKEN are read only when wbstream
+    # is named: the service closed its beta to its own staff on 2026-10-10
+    # and is out of the default walk (internal/gate localProviders).
     #
     # Fork rule: GitHub gives a pull request from a fork no secrets, so this
     # job does not run for one. It shows as skipped and gate-plan's summary
@@ -285,6 +288,7 @@ jobs:
           GATE_WBSTREAM_TOKEN: ${{ secrets.GATE_WBSTREAM_TOKEN }}
           GATE_JITSI_HOSTS: ${{ secrets.GATE_JITSI_HOSTS }}
           GATE_VKCALLS_ROOMS: ${{ secrets.GATE_VKCALLS_ROOMS }}
+          GATE_MTSLINK_ROOMS: ${{ secrets.GATE_MTSLINK_ROOMS }}
         run: |
           # Every value is masked before any step could print it. Split on
           # line breaks too: a line of a value the mask missed would print.
@@ -296,6 +300,14 @@ jobs:
             mask "$e"
             mask "$(sed -E 's|^[A-Za-z]+://||; s|[?#].*||; s|/+$||; s|.*/||' <<<"$e")"
           done < <(entries "$GATE_TELEMOST_ROOMS,$GATE_WBSTREAM_ROOMS")
+          # An MTS Link entry is .../j/<owner>/<event>: the link, the event
+          # and the account that owns the room, each on its own too.
+          while IFS= read -r e; do
+            mask "$e"
+            path="$(sed -E 's|^[A-Za-z]+://||; s|[?#].*||; s|/+$||' <<<"$e")"
+            mask "${path##*/}"
+            owner="${path%/*}"; mask "${owner##*/}"
+          done < <(entries "$GATE_MTSLINK_ROOMS")
           # A Jitsi host as given, and bare, as room URLs and errors carry it.
           while IFS= read -r e; do
             mask "$e"
@@ -313,8 +325,7 @@ jobs:
             fi
           }
           require GATE_TELEMOST_ROOMS "a comma-separated pool of Telemost room ids or URLs"
-          require GATE_WBSTREAM_ROOMS "a comma-separated pool of WB Stream room ids or URLs"
-          require GATE_WBSTREAM_TOKEN "the WB Stream account token the local server joins with (WB refuses a guest as the first participant of an idle room)"
+          require GATE_MTSLINK_ROOMS "a comma-separated pool of MTS Link event join links (https://my.mts-link.ru/j/<owner>/<event>) of endless meetings"
 
       - uses: actions/checkout@v7
         with:
@@ -334,6 +345,7 @@ jobs:
           OLCRTC_GATE_WBSTREAM_TOKEN: ${{ secrets.GATE_WBSTREAM_TOKEN }}
           OLCRTC_GATE_JITSI_HOSTS: ${{ secrets.GATE_JITSI_HOSTS }}
           OLCRTC_GATE_VKCALLS_ROOMS: ${{ secrets.GATE_VKCALLS_ROOMS }}
+          OLCRTC_GATE_MTSLINK_ROOMS: ${{ secrets.GATE_MTSLINK_ROOMS }}
         run: |
           go test -count=1 -timeout 25m ./internal/gate -run '^TestGate$' -v \
             -olcrtc.gate -olcrtc.gate-target=local -olcrtc.gate-dir=gate-artifacts/cli
@@ -351,6 +363,7 @@ jobs:
           OLCRTC_GATE_WBSTREAM_TOKEN: ${{ secrets.GATE_WBSTREAM_TOKEN }}
           OLCRTC_GATE_JITSI_HOSTS: ${{ secrets.GATE_JITSI_HOSTS }}
           OLCRTC_GATE_VKCALLS_ROOMS: ${{ secrets.GATE_VKCALLS_ROOMS }}
+          OLCRTC_GATE_MTSLINK_ROOMS: ${{ secrets.GATE_MTSLINK_ROOMS }}
         run: |
           go test -count=1 -tags olcrtc_lean -timeout 60m ./internal/gate -run '^TestGate$' -v \
             -olcrtc.gate -olcrtc.gate-target=local -olcrtc.gate-dir=gate-artifacts/mobile
@@ -370,6 +383,7 @@ jobs:
           OLCRTC_GATE_WBSTREAM_TOKEN: ${{ secrets.GATE_WBSTREAM_TOKEN }}
           OLCRTC_GATE_JITSI_HOSTS: ${{ secrets.GATE_JITSI_HOSTS }}
           OLCRTC_GATE_VKCALLS_ROOMS: ${{ secrets.GATE_VKCALLS_ROOMS }}
+          OLCRTC_GATE_MTSLINK_ROOMS: ${{ secrets.GATE_MTSLINK_ROOMS }}
         run: |
           go test -count=1 -timeout 15m ./internal/gate -run '^TestGate$' -v \
             -olcrtc.gate -olcrtc.gate-target=local -olcrtc.gate-dir=gate-artifacts/cli-dtls \
