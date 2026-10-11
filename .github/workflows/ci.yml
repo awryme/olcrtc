@@ -299,7 +299,7 @@ jobs:
           while IFS= read -r e; do
             mask "$e"
             mask "$(sed -E 's|^[A-Za-z]+://||; s|[?#].*||; s|/+$||; s|.*/||' <<<"$e")"
-          done < <(entries "$GATE_TELEMOST_ROOMS,$GATE_WBSTREAM_ROOMS")
+          done < <(entries "$GATE_TELEMOST_ROOMS,$GATE_WBSTREAM_ROOMS,$GATE_VKCALLS_ROOMS")
           # An MTS Link entry is .../j/<owner>/<event>: the link, the event
           # and the account that owns the room, each on its own too.
           while IFS= read -r e; do

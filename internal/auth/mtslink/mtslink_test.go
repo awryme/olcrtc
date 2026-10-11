@@ -15,27 +15,27 @@ import (
 )
 
 const (
-	testEvent   = "26440844595"
-	testSession = "25948393178"
-	testOwner   = "184238075"
+	testEvent   = "20300400500"
+	testSession = "20300400600"
+	testOwner   = "100200300"
 	testLink    = "https://my.mts-link.ru/j/" + testOwner + "/" + testEvent
 )
 
 // The gateway's own answers, as it gave them on 2026-10-11 (ids kept, tokens
 // replaced). The tests below answer with these and nothing invented.
 const (
-	replyEvent = `{"id":26440844595,"access":1,"type":"meeting","status":"ACTIVE","isEndless":true,` +
-		`"eventSessions":[{"id":25948393178,"access":1,"type":"meeting","status":"START"}]}`
+	replyEvent = `{"id":20300400500,"access":1,"type":"meeting","status":"ACTIVE","isEndless":true,` +
+		`"eventSessions":[{"id":20300400600,"access":1,"type":"meeting","status":"START"}]}`
 	replyGuestLogin = `{"isAccepted":true,"participationId":1485424883,"user":{"sessionId":"529e1f7db49244b035d47e8c4eca75f4"},` +
 		`"participation":{"id":1485424883,"name":"","nickname":"cap-a","isOnline":false,"isAccepted":true,"role":"GUEST",` +
-		`"event":{"id":26440844595},"user":{"id":184268153,"type":"GUEST","isDeleted":false,"nickname":"cap-a"},` +
-		`"eventSession":{"id":25948393178},"registerStatus":"INVITED"}}`
+		`"event":{"id":20300400500},"user":{"id":100200999,"type":"GUEST","isDeleted":false,"nickname":"cap-a"},` +
+		`"eventSession":{"id":20300400600},"registerStatus":"INVITED"}}`
 	replyConfiguration = `{"hlsServer":"events-delivery-files.webinar.ru","rtcServer":"sfu.mts-link.ru",` +
-		`"mediaServer":"live-sd.webinar.ru","rtcUrl":"\/\/sfu.mts-link.ru\/event\/25948393178\/rtc",` +
+		`"mediaServer":"live-sd.webinar.ru","rtcUrl":"\/\/sfu.mts-link.ru\/event\/20300400600\/rtc",` +
 		`"cometServer":"msg-edge-5.webinar.ru","rtcActiveSpeakerServer":"sfu.mts-link.ru"}`
 	replyConference = `{"id":395296501,"isDeleted":false,"createAt":"2026-10-11T15:46:04+03:00",` +
 		`"privateKey":"vcPRIVATE0000000000000000000000000","publicKey":"vcPUBLIC00000000000000000000000000",` +
-		`"userId":184268153,"user":{"id":184268153,"nickname":"cap-a"},"status":"PUBLISH","size":"SMALL",` +
+		`"userId":100200999,"user":{"id":100200999,"nickname":"cap-a"},"status":"PUBLISH","size":"SMALL",` +
 		`"hasStream":false,"hasVideo":true,"hasAudio":false,"typeMedia":"conference","participationId":1485424883}`
 	replyJoinToken    = `{"data":{"joinToken":"vcJOIN000000000000000000000000000"}}`
 	replyGone         = `{"error":{"code":406,"message":"Not Acceptable"}}`
@@ -213,7 +213,7 @@ func TestIssueWalksTheGuestFlowAndBuildsTheRoomJoin(t *testing.T) {
 	}
 	q := u.Query()
 	for key, want := range map[string]string{
-		"userId":           "184268153", // participation.user.id: the login reply's top-level user has no id
+		"userId":           "100200999", // participation.user.id: the login reply's top-level user has no id
 		"joinToken":        "vcJOIN000000000000000000000000000",
 		"publishToken":     "vcPRIVATE0000000000000000000000000",
 		"userName":         "Мария Ковалёва",
@@ -227,7 +227,7 @@ func TestIssueWalksTheGuestFlowAndBuildsTheRoomJoin(t *testing.T) {
 		t.Errorf("did = %q, pid = %q; want two 16-hex ids", did, pid)
 	}
 
-	if creds.Extra["sessionId"] != testSession || creds.Extra["userId"] != "184268153" ||
+	if creds.Extra["sessionId"] != testSession || creds.Extra["userId"] != "100200999" ||
 		creds.Extra["conferenceId"] != "395296501" || creds.Extra["gateway"] != srv.URL {
 		t.Errorf("Extra = %v", creds.Extra)
 	}
@@ -308,7 +308,7 @@ func TestARoomTheServiceNoLongerHasIsGone(t *testing.T) {
 
 func TestAnEventWithoutASessionIsNotARoom(t *testing.T) {
 	g, srv := newGateway(t)
-	g.status("/api/event/"+testEvent, http.StatusOK, `{"id":26440844595,"eventSessions":[]}`)
+	g.status("/api/event/"+testEvent, http.StatusOK, `{"id":20300400500,"eventSessions":[]}`)
 	if _, err := issue(t, srv, testLink, "a"); !errors.Is(err, ErrNoSession) {
 		t.Fatalf("error = %v, want %v", err, ErrNoSession)
 	}

@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	testSession = "25948393178"
+	testSession = "20300400600"
 	testPeer    = "31djU82nnvUp1kyQjpDpPhyWx6eeoD1xs1SrH6HGSrPpwQyR8IgX3REL7"
 	testCookies = "access=eyJguest.access; refresh=6074c7a91c56; sessionId=529e1f7d"
 	testConf    = "395296501"
@@ -199,7 +199,7 @@ func (f *fakeSFU) join(w http.ResponseWriter, r *http.Request, offer string) {
 
 // joinURL is the room join as the auth provider hands it over.
 func (f *fakeSFU) joinURL() string {
-	return f.srv.URL + "/rtc/room/" + testSession + "/join?userId=184268153&joinToken=vcJOIN&disableRecording=true" +
+	return f.srv.URL + "/rtc/room/" + testSession + "/join?userId=100200999&joinToken=vcJOIN&disableRecording=true" +
 		"&userName=guest&publishToken=vcPRIVATE&did=33d131e5f5194d28&pid=3d131e5f5194d283"
 }
 
@@ -292,7 +292,7 @@ func TestTheEngineNamesItsCodecAndReportsKeyframeRequests(t *testing.T) {
 }
 
 func TestOfferURLAddsWhatDescribesTheOffer(t *testing.T) {
-	got, err := offerURL("https://sfu.mts-link.ru/rtc/room/25948393178/join?userId=1&joinToken=vcJ&userName=%D0%9C", "2")
+	got, err := offerURL("https://sfu.mts-link.ru/rtc/room/20300400600/join?userId=1&joinToken=vcJ&userName=%D0%9C", "2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func TestOfferURLAddsWhatDescribesTheOffer(t *testing.T) {
 			t.Errorf("%s = %q, want %q", key, q.Get(key), want)
 		}
 	}
-	if u.Host != "sfu.mts-link.ru" || u.Path != "/rtc/room/25948393178/join" {
+	if u.Host != "sfu.mts-link.ru" || u.Path != "/rtc/room/20300400600/join" {
 		t.Errorf("the join moved: %s%s", u.Host, u.Path)
 	}
 	if _, err := offerURL("://nothing", "2"); err == nil {
@@ -366,7 +366,7 @@ func TestSessionJoinsPublishesAndHearsTheRelay(t *testing.T) {
 		t.Error("the guest's cookies went to the SFU")
 	}
 	for key, want := range map[string]string{
-		"userId": "184268153", "joinToken": "vcJOIN", "publishToken": "vcPRIVATE", "disableRecording": "true",
+		"userId": "100200999", "joinToken": "vcJOIN", "publishToken": "vcPRIVATE", "disableRecording": "true",
 		"twcc": "true", "preferredPublishCodec": "vp9", "originMid": "2",
 	} {
 		if query.Get(key) != want {
