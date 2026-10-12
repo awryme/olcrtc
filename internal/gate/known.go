@@ -45,6 +45,15 @@ type KnownFailure struct{ Cell, Issue, Why string }
 // pushes. Both stay on #49 until on-top traffic stops waiting behind a
 // window of bulk data.
 var knownFailures = []KnownFailure{ //nolint:gochecknoglobals // edited by hand as issues open and close; tests swap it
+	// ai-generated: the telemost entry, the whole provider on #58. Since some
+	// time after 2026-09-30 the relay forwards a guest's published track only
+	// as a trickle, whatever the rate, the frame shape or the receiver's
+	// reports: a paced 33 kB/s stream is cut from the first seconds, a
+	// 400 kB/s one after ~9 s, and neither REMB nor loss-free reports change
+	// it. Every cell of the provider fails every run until the service
+	// forwards guest tracks again.
+	{Cell: "engine-linux/telemost/*/*/*", Issue: issues + "58",
+		Why: "the relay cuts a published track to a trickle, every rate and feedback"},
 	{Cell: "engine-linux/salutejazz/datachannel/*/S2", Issue: issues + "49",
 		Why: "liveness close, throughput and on-top latency on a slow Sber leg"},
 	{Cell: "engine-linux/salutejazz/datachannel/*/S3", Issue: issues + "49",
