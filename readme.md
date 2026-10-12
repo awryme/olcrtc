@@ -15,7 +15,7 @@
 <p align="center"><a href="readme.ru.md">RU</a> / <b>EN</b></p>
 
 
-`olcRTC` (OpenLibreCommunity RTC) is an encrypted TCP-over-WebRTC tunnel. Traffic is disguised as an ordinary video call on allowed services (Jitsi, Yandex Telemost, WbStream, Sber SaluteJazz, VK Calls). Inside there is XChaCha20-Poly1305 encryption and smux multiplexing over WebRTC data/video channels.
+`olcRTC` (OpenLibreCommunity RTC) is an encrypted TCP-over-WebRTC tunnel. Traffic is disguised as an ordinary video call on allowed services (Jitsi, Yandex Telemost, WbStream, Sber SaluteJazz, VK Calls, MTS Link). Inside there is XChaCha20-Poly1305 encryption and smux multiplexing over WebRTC data/video channels.
 
 Status: **Beta**
 
@@ -71,6 +71,7 @@ to tell its users apart, and a phone is not a server.
 | A failover room list on mobile | `AddFailoverRoom` / `ClearFailoverRooms` beside `SetRoom`: the runtime walks the primary and the extras under the supervisor, one pass, re-reading the list at every hop, so the host can append rooms to a live generation; the pass ends with an error and the host's own retry loop takes over. A room that turns out to be empty is given up on only while another is on offer, counted as that room's run starts, so a lone room is retried in place exactly as before failover and a room the host appends is in force from the next start. `SetSessionListener` names the room of each session as it opens, which is how a host that cannot read the log tells a handover from a reconnect. |
 | salutejazz engine and auth provider | The Sber SaluteJazz JSON connector (LiveKit-as-JSON over pion). |
 | vkcalls engine and auth provider | VK Calls, joined as a guest with the call's link, over `vp8channel`. |
+| mtslink engine and auth provider | MTS Link, joined as a guest with an endless meeting's link. Its SFU forwards VP9 and no VP8, so `vp8channel` rides it dressed as VP9. |
 | A DTLS ClientHello profile | `dtls.profile`, and `SetDTLSProfile` on mobile. `off`, the default, keeps the WebRTC library's own handshake; `chrome-linux-138-compat-v1` opens it the way Chrome 138 does. Experimental: Ghostlane offers it as a switch, off by default. |
 | A relay window for SaluteJazz | LiveKit 1.5.3, which SaluteJazz runs, acknowledges at once and queues toward each subscriber without a limit, so on a slow Sber leg the tunnel's control frames waited behind a stream window of data and liveness closed sessions that were alive. Each destination now gets a window sized by the sender to the best rate its leg showed in the last ten seconds times three seconds, between 16 and 192 KiB. It is armed only when both ends mark it in the handshake, so an older peer is served as before. |
 | Direct rules on the client | `route.direct` / `route.direct_file`, and `SetDirectRules` on mobile: the destinations a client dials itself instead of through the tunnel, over the same protected socket the provider gets. Rules name hosts (`domain:`, `full:`) or addresses and prefixes, in the syntax of Xray's lists. For an address the rules do not list, the client reads the first bytes for a TLS server name or an HTTP `Host`, so a tun2socks that hands over only addresses still routes by name. With `udp.enabled`, datagrams to a listed target go direct too, and a DNS query for a listed name goes to the network's own resolvers instead of the exit. This is how Ghostlane's regional bypass modes route an olcRTC room. See [configuration.md](docs/configuration.md). |
@@ -86,7 +87,7 @@ Changes that belong upstream are prepared as pull requests against it — the
 
 ## Features
 
-- **Providers:** `jitsi`, `telemost`, `wbstream`, `salutejazz`, `vkcalls`
+- **Providers:** `jitsi`, `telemost`, `wbstream`, `salutejazz`, `vkcalls`, `mtslink`
 - **Transports:** `datachannel`, `vp8channel`, `seichannel`, `videochannel`
 - **Platforms:** Linux, macOS, Windows, Android (gomobile), embeddable Go library
 - **Public Go packages:** `pkg/olcrtc/client`, `pkg/olcrtc/tunnel`, `pkg/olcrtc/engineconn`

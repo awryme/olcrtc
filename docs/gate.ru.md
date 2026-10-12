@@ -33,7 +33,7 @@ go test -count=1 -tags olcrtc_lean -timeout 45m ./internal/gate -run '^TestGate$
 ```
 
 - `-olcrtc.gate-dry` печатает план, по id ячейки на строку, и ничего не запускает. На локальной цели ему не нужны ни комнаты, ни токен; цели link ссылка нужна и здесь, потому что план берёт пару из неё.
-- Для Jitsi и SaluteJazz секреты не нужны. Для Telemost и WB Stream нужны заранее созданные комнаты, для WB Stream ещё и токен аккаунта: см. [Комнаты и секреты](#комнаты-и-секреты). Передавайте их через окружение, например из файла вне репозитория (`set -a; . ~/gate.env; set +a`), а не в командной строке.
+- Для Jitsi и SaluteJazz секреты не нужны. Для Telemost, VK Calls и MTS Link нужны заранее созданные комнаты; для WB Stream, который идёт только когда назван, - комнаты и токен аккаунта: см. [Комнаты и секреты](#комнаты-и-секреты). Передавайте их через окружение, например из файла вне репозитория (`set -a; . ~/gate.env; set +a`), а не в командной строке.
 - Локальная цель собирает `cmd/olcrtc` с `-tags olcrtc_testhooks`, поэтому `go` должен быть в `PATH`.
 - Прогон заканчивается за 90 с до дедлайна `go test`, чтобы отчёт записался и тогда, когда время вышло; ячейки, до которых он не дошёл, проваливаются как не выполненные. Давайте `-timeout` с большим запасом: стандартные 10 м обрезают почти любой прогон. `-timeout`, после которого остаётся не больше 90 с, отклоняется.
 - Против ноды флота: `-olcrtc.gate-target=link` и ссылка `olcrtc://` в `OLCRTC_GATE_LINK`. Сервер там свой у ноды; нагрузка идёт на публичные URL (`-olcrtc.gate-link-small`, `-olcrtc.gate-link-big`, `-olcrtc.gate-link-sink`), а логи прогон не пишет.
@@ -45,11 +45,12 @@ go test -count=1 -tags olcrtc_lean -timeout 45m ./internal/gate -run '^TestGate$
 | `-olcrtc.gate` | выключен | запуск гейта |
 | `-olcrtc.gate-target` | `local` | `local`: дочерний сервер на каждую пару; `link`: сервер за ссылкой `olcrtc://` |
 | `-olcrtc.gate-dir` | `gate-artifacts` | куда пишутся отчёт и очищенные логи; относительный путь считается от корня модуля |
-| `-olcrtc.gate-providers` | `jitsi,telemost,wbstream,salutejazz` | провайдеры локальной цели, по очереди |
+| `-olcrtc.gate-providers` | `jitsi,telemost,mtslink,salutejazz,vkcalls` | провайдеры локальной цели, по очереди. `wbstream` поддерживается, но в умолчание не входит: сервис 10.10.2026 закрыл бету для всех, кроме своих сотрудников, и на каждый вход отвечает 401, поэтому он идёт только когда назван |
 | `-olcrtc.gate-transports` | `datachannel,seichannel,vp8channel` | транспорты локальной цели, см. [Пары](#пары); `videochannel` запускается, только если его назвать |
 | `-olcrtc.gate-clients` | свой для сборки | `cli` в обычной сборке, `mobile` в сборке `olcrtc_lean`, один вариант на процесс |
 | `-olcrtc.gate-telemost-rooms` | пусто | пул Telemost; иначе `OLCRTC_GATE_TELEMOST_ROOMS` |
 | `-olcrtc.gate-vkcalls-rooms` | пусто | пул VK Calls, ссылки на комнаты; иначе `OLCRTC_GATE_VKCALLS_ROOMS` |
+| `-olcrtc.gate-mtslink-rooms` | пусто | пул MTS Link, ссылки на вход в мероприятие; иначе `OLCRTC_GATE_MTSLINK_ROOMS` |
 | `-olcrtc.gate-wbstream-rooms` | пусто | пул WB Stream; иначе `OLCRTC_GATE_WBSTREAM_ROOMS` |
 | `-olcrtc.gate-jitsi-hosts` | пусто | хосты Jitsi вместо списка инстансов; иначе `OLCRTC_GATE_JITSI_HOSTS` |
 | `-olcrtc.gate-jitsi-instances` | `docs/jitsi.instances.yaml` | список инстансов Jitsi; относительный путь считается от корня модуля |
@@ -67,6 +68,8 @@ go test -count=1 -tags olcrtc_lean -timeout 45m ./internal/gate -run '^TestGate$
 | Переменная | Что задаёт |
 |---|---|
 | `OLCRTC_GATE_TELEMOST_ROOMS` | пул Telemost, если его флаг пуст |
+| `OLCRTC_GATE_VKCALLS_ROOMS` | пул VK Calls, если его флаг пуст |
+| `OLCRTC_GATE_MTSLINK_ROOMS` | пул MTS Link, если его флаг пуст |
 | `OLCRTC_GATE_WBSTREAM_ROOMS` | пул WB Stream, если его флаг пуст |
 | `OLCRTC_GATE_WBSTREAM_TOKEN` | токен аккаунта WB Stream для локального сервера; флага у него нет |
 | `OLCRTC_GATE_JITSI_HOSTS` | хосты Jitsi, если их флаг пуст |
@@ -81,7 +84,7 @@ go test -count=1 -tags olcrtc_lean -timeout 45m ./internal/gate -run '^TestGate$
 
 - **Jitsi.** Каждая пара получает новую комнату, `https://<host>/gate-<12 hex>`, на первом хосте, который ответил на один HTTPS-запрос за 5 с. Хосты берутся из списка инстансов или из переопределения, если в нём есть хоть один хост. Запись переопределения - голый хост или URL; используется только хост.
 - **SaluteJazz.** Каждая пара получает новую комнату, `<code>:<password>`, от анонимного вызова create-meeting Сбера - того же, что делает собственный auth-провайдер движка `salutejazz`. Ни аккаунта, ни токена не нужно, и комнату никто не возвращает: удаления у Сбера нет, так что прогон оставляет свои комнаты за собой. Не удавшееся создание - это сервер, который не поднялся.
-- **Telemost и WB Stream.** Комнаты ни того, ни другого провайдера гейт не создаёт, поэтому у каждого есть пул заранее созданных. Записи разделяются запятыми или переводами строки, обрезаются по краям, пустые отбрасываются. Прогон берёт запись `run_number mod len(pool)`, так что прогоны подряд берут комнаты по очереди.
+- **Telemost, VK Calls, MTS Link и WB Stream.** Комнаты этих провайдеров гейт не создаёт, поэтому у каждого есть пул заранее созданных. Запись MTS Link - ссылка на вход в постоянную встречу, куда гость входит без организатора внутри. Записи разделяются запятыми или переводами строки, обрезаются по краям, пустые отбрасываются. Прогон берёт запись `run_number mod len(pool)`, так что прогоны подряд берут комнаты по очереди.
 - **Токен WB Stream.** WB не пускает гостя первым участником пустой комнаты (`403 guests cannot create rooms`), поэтому локальный сервер входит с токеном аккаунта из `OLCRTC_GATE_WBSTREAM_TOKEN`. Клиент остаётся гостем, как и приложение. Без токена каждая ячейка wbstream проваливается с причиной, в которой названа эта переменная.
 - **На каждую пару.** Новый ключ из 64 hex и новый id канала `gate-<12 hex>`, так что два прогона в одной комнате пула не читают кадры друг друга.
 - **Закрытое.** YAML сервера (комната, ключ, токен) и его сырой лог лежат во временном каталоге. В `-olcrtc.gate-dir` попадают только очищенные копии.
@@ -93,6 +96,8 @@ go test -count=1 -tags olcrtc_lean -timeout 45m ./internal/gate -run '^TestGate$
 | Telemost | `<id>` | `https://telemost.yandex.ru/j/<id>` |
 | Telemost | `https://telemost.yandex.ru/j/<id>` | URL как есть |
 | Telemost | URL с `http://` или URL без схемы | тот же URL с `https://` |
+| VK Calls | `https://vk.ru/call/join/<id>` | ссылка как есть |
+| MTS Link | `https://my.mts-link.ru/j/<owner>/<event>` | ссылка как есть |
 | WB Stream | `<id>` | `<id>` |
 | WB Stream | `https://stream.wb.ru/room/<id>`, со схемой или без | `<id>`, последний сегмент пути; query и fragment отбрасываются |
 
@@ -103,8 +108,9 @@ go test -count=1 -tags olcrtc_lean -timeout 45m ./internal/gate -run '^TestGate$
 | Секрет | Обязателен | Доходит до `go test` как | Значение |
 |---|---|---|---|
 | `GATE_TELEMOST_ROOMS` | да | `OLCRTC_GATE_TELEMOST_ROOMS` | пул Telemost: id или URL комнат |
-| `GATE_WBSTREAM_ROOMS` | да | `OLCRTC_GATE_WBSTREAM_ROOMS` | пул WB Stream: id или URL комнат |
-| `GATE_WBSTREAM_TOKEN` | да | `OLCRTC_GATE_WBSTREAM_TOKEN` | access token аккаунта WB Stream |
+| `GATE_MTSLINK_ROOMS` | да | `OLCRTC_GATE_MTSLINK_ROOMS` | пул MTS Link: ссылки на вход (https://my.mts-link.ru/j/<owner>/<event>) в постоянные встречи. В дефолтном обходе с 11.10.2026, после live-валидации движка |
+| `GATE_WBSTREAM_ROOMS` | нет | `OLCRTC_GATE_WBSTREAM_ROOMS` | пул WB Stream: id или URL комнат. Читается, когда `wbstream` назван в `-olcrtc.gate-providers` |
+| `GATE_WBSTREAM_TOKEN` | нет | `OLCRTC_GATE_WBSTREAM_TOKEN` | access token аккаунта WB Stream, читается вместе с пулом |
 | `GATE_JITSI_HOSTS` | нет | `OLCRTC_GATE_JITSI_HOSTS` | хосты Jitsi; пусто - список инстансов |
 | `GATE_VKCALLS_ROOMS` | нет | `OLCRTC_GATE_VKCALLS_ROOMS` | Пул VK Calls: ссылки на комнаты (https://vk.ru/call/join/<id>). Читается, когда провайдер `vkcalls` назван в `-olcrtc.gate-providers`; в дефолтном обходе с 28.09.2026, после live-валидации движка (19 Мбит/с в обе стороны, S0-S7) |
 
@@ -119,6 +125,8 @@ go test -count=1 -tags olcrtc_lean -timeout 45m ./internal/gate -run '^TestGate$
 | `jitsi` | `datachannel`, `videochannel`, `seichannel`, `vp8channel` |
 | `telemost` | `vp8channel`, `videochannel` (Telemost режет SCTP, а seichannel там не работает по устройству) |
 | `wbstream` | `vp8channel`, `videochannel`, `seichannel` (гости WB не могут публиковать data) |
+| `vkcalls` | `vp8channel`, `videochannel` (SFU не мостит data между гостями) |
+| `mtslink` | `vp8channel` (SFU не передаёт data между гостями и пересылает VP9 и H264, но не VP8: `vp8channel` одевает свои кадры в VP9, остальные видеотранспорты публикуют то, что он не берёт) |
 | `salutejazz` | `datachannel` (Сбер пускает гостя только в data-каналы комнаты, никогда в медиадорожку) |
 
 По умолчанию `-olcrtc.gate-transports` запускает `datachannel`, `seichannel` и `vp8channel`, те из них, что несёт хоть один провайдер. `videochannel` запускается, только если его назвать: он шлёт один фрагмент в 256 байт на кадр при 30 fps, около 7,5 KiB/s, так что одна большая загрузка S0 на 10 MiB не уложилась бы в 5 мин ячейки. Список, заданный в командной строке, берётся как есть: неизвестное имя, транспорт, которого нет в сборке (в lean-сборке нет `videochannel`) или который не несёт ни один провайдер, и провайдер, оставшийся без транспортов, - ошибки плана. У цели link одна пара - пара ссылки.
@@ -145,7 +153,7 @@ go test -count=1 -tags olcrtc_lean -timeout 45m ./internal/gate -run '^TestGate$
 | S6 | late server bridge | новый сервер, у которого bridge Jitsi открывается на 3 с позже, затем такой же с опозданием на 8 с (olcbox#22) | клиент готов не раньше задержки (это доказывает, что bridge опоздал) и в пределах задержки плюс бюджет handshake | локальная цель, `jitsi/datachannel`, оба варианта |
 | S7 | phone memory | пик heap и RSS от начала S2 до конца S4 над базой, снятой до старта клиента; горутины до S1 и в конце S4 | `heap_growth_bytes`, `rss_growth_bytes`, `goroutine_growth` | нагрузочные пары, `mobile` |
 
-Нагрузочные пары - `jitsi/datachannel`, `telemost/vp8channel`, `wbstream/vp8channel` и `salutejazz/datachannel` у локальной цели, пара ссылки у цели link. Большая загрузка - `-olcrtc.gate-big-mb` MiB. Сценарии одного клиента идут по порядку в одном туннеле. S6 задерживает bridge через `OLCRTC_TEST_BRIDGE_DELAY`, который читает только сервер, собранный с `olcrtc_testhooks`; в релизной сборке такого хука нет. Такой сервер читает и `OLCRTC_TEST_PROVIDER_DROP_AFTER`, длительность Go: через столько после входа в комнату он один раз роняет провайдера и пересобирает его, как при обрыве соединения ретранслятором (olcrtc#19). Ни один сценарий её не задаёт: сервер берёт её из окружения прогона. Кроме того, локальная цель запускает каждый сервер с `OLCRTC_TEST_ALLOW_PRIVATE_TARGETS=1`: origin, с которого качает клиент, живёт на loopback, а такие цели политика исходящих соединений сервера запрещает, и снимает её ради него только такой сервер.
+Нагрузочные пары - `jitsi/datachannel`, `telemost/vp8channel`, `mtslink/vp8channel`, `salutejazz/datachannel` и `vkcalls/vp8channel` (и `wbstream/vp8channel`, когда он назван) у локальной цели, пара ссылки у цели link. Большая загрузка - `-olcrtc.gate-big-mb` MiB. Сценарии одного клиента идут по порядку в одном туннеле. S6 задерживает bridge через `OLCRTC_TEST_BRIDGE_DELAY`, который читает только сервер, собранный с `olcrtc_testhooks`; в релизной сборке такого хука нет. Такой сервер читает и `OLCRTC_TEST_PROVIDER_DROP_AFTER`, длительность Go: через столько после входа в комнату он один раз роняет провайдера и пересобирает его, как при обрыве соединения ретранслятором (olcrtc#19). Ни один сценарий её не задаёт: сервер берёт её из окружения прогона. Кроме того, локальная цель запускает каждый сервер с `OLCRTC_TEST_ALLOW_PRIVATE_TARGETS=1`: origin, с которого качает клиент, живёт на loopback, а такие цели политика исходящих соединений сервера запрещает, и снимает её ради него только такой сервер.
 
 У ячейки 5 мин, у S2 и S3 - 10. Сервер, который не поднялся, получает ещё одну попытку через 30 с (без токена или без комнаты в пуле повтора нет), затем его ячейки проваливаются с причиной и последней строкой лога сервера, обычно ответом провайдера; ячейки клиента, который не поднялся, тоже проваливаются. Ячейки не перезапускаются: сбой под нагрузкой - это находка.
 

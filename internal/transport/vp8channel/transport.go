@@ -94,6 +94,11 @@ const (
 	// is injected even while bulk data flows, so the SFU decoder never times
 	// out and stops forwarding the track.
 	forceKeepalivePeriod = 2 * time.Second
+	// keyframeRequestGap is the least time between two keyframes written
+	// because the relay asked: a tenth of a second answers a request about as
+	// fast as its round trip, and a relay that takes none of our keyframes -
+	// and so asks without end - gets ten a second, not one a tick.
+	keyframeRequestGap = 100 * time.Millisecond
 	// ai-generated: publishBurstBytes and this comment (olcrtc#26).
 	// publishBurstBytes is what the writer's token bucket holds when the
 	// engine's service polices how fast a participant may publish (see
@@ -127,6 +132,14 @@ type streamTransport struct {
 
 	stream videoSession
 	track  *webrtc.TrackLocalStaticSample
+	// carrier is the codec the frames ride as; nil is the transport's own VP8
+	// (carrier.go). dressBuf is the sample a carrier that re-heads its frames
+	// builds, reused under writeMu.
+	carrier  *carrier
+	dressBuf []byte
+	// keyframeWanted is a relay's request for a keyframe, answered by the
+	// writer on its next tick (requestKeyframe).
+	keyframeWanted atomic.Bool
 	// writeMu serializes all track.WriteSample calls. pion's WriteSample is
 	// not safe for concurrent use (see writeSampleLocked); the server writes
 	// bulk data from per-peer pumps while writerLoop writes control frames
@@ -249,15 +262,24 @@ func New(ctx context.Context, cfg transport.Config) (transport.Transport, error)
 		return nil, fmt.Errorf("open video session: %w", err)
 	}
 
-	track, err := common.NewVideoTrack(webrtc.RTPCodecCapability{
-		MimeType:  webrtc.MimeTypeVP8,
-		ClockRate: 90000,
-	}, "vp8channel")
+	// The relay behind the engine decides what the frames ride as: VP8 unless
+	// the engine names another codec.
+	ride, err := carrierFor(stream.VideoCodec())
+	if err != nil {
+		_ = stream.Close()
+		return nil, err
+	}
+
+	track, err := common.NewVideoTrack(ride.capability, "vp8channel", ride.trackOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("build video track: %w", err)
 	}
 
 	tr := newStreamTransport(stream, track, cfg, opts)
+	tr.carrier = ride
+	if ride.answersKeyframeRequests() {
+		stream.SetKeyframeRequestHandler(tr.requestKeyframe)
+	}
 
 	if err := stream.AddTrack(track); err != nil {
 		return nil, fmt.Errorf("attach local video track: %w", err)

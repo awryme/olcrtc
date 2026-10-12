@@ -155,6 +155,24 @@ type PublishRateLimited interface {
 	PublishRateLimit() int
 }
 
+// VideoCodecSelector is implemented by engines whose service forwards video
+// in one codec and not the VP8 a video transport would publish on its own. A
+// transport that dresses its bytes as video asks its session before it builds
+// the track, and builds it in the codec named.
+type VideoCodecSelector interface {
+	// VideoCodec is the MIME type a published track has to carry, e.g.
+	// webrtc.MimeTypeVP9.
+	VideoCodec() string
+}
+
+// KeyframeRequestSource is implemented by engines whose relay asks a
+// publisher for a keyframe (RTCP PLI or FIR) and forwards nothing of its
+// track until one arrives. The handler is called for every request, from the
+// engine's own goroutine; it must not block.
+type KeyframeRequestSource interface {
+	SetKeyframeRequestHandler(cb func())
+}
+
 // VideoTrackCapable is implemented by engines that can exchange video tracks.
 type VideoTrackCapable interface {
 	AddVideoTrack(track webrtc.TrackLocal) error

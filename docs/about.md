@@ -78,6 +78,7 @@ olcrtc client.yaml
 | `wbstream` | `livekit` | credentials via WbBStream API, separate registration |
 | `salutejazz` | `salutejazz` | room reference `<code>:<password>`; joins as an anonymous guest, no registration; a room is one anonymous create call; data channels only, and every byte crosses Sber's TURN relay |
 | `vkcalls` | `vkcalls` | VK Calls join link `https://vk.ru/call/join/<id>`; joins as an anonymous guest, no registration; video tracks only — the SFU bridges no arbitrary data channel |
+| `mtslink` | `mtslink` | MTS Link join link of an endless meeting, `https://my.mts-link.ru/j/<owner>/<event>`; joins as a guest, no registration; video tracks only, and the SFU forwards VP9 and H264 but no VP8, so `vp8channel` rides it dressed as VP9 |
 | `none` | set in `engine.name` | direct engine mode with `engine.url` and `engine.token`, separate registration |
 
 The same name is used in Go configs, logs, flags and tests: `Provider` in Go and `auth.provider` in YAML.
@@ -93,6 +94,7 @@ The same name is used in Go configs, logs, flags and tests: `Provider` in Go and
 | `jitsi` | `internal/engine/jitsi` | Jitsi MUC/Jingle/colibri-ws, datachannel/best-effort video |
 | `salutejazz` | `internal/engine/salutejazz` | Sber's JSON connector (LiveKit-as-JSON over pion), data over the publisher PeerConnection |
 | `vkcalls` | `internal/engine/vkcalls` | VK Calls SERVER topology: signaling WebSocket, one bundled PeerConnection with a browser-shaped answer, media over its single video layer |
+| `mtslink` | `internal/engine/mtslink` | MTS Link's SFU: one SDP exchange over HTTP, one PeerConnection - a published VP9 track and nine receive slots the SFU fills with the room's publishers; answers the SFU's keyframe requests |
 
 `internal/engine/builtin` binds `auth.provider` to the proper engine. There is no separate `internal/provider` package in the current project.
 

@@ -56,6 +56,7 @@ const (
 const (
 	providerJitsi      = "jitsi"
 	providerTelemost   = "telemost"
+	providerMTSLink    = "mtslink"
 	providerVKCalls    = "vkcalls"
 	providerWBStream   = "wbstream"
 	providerSaluteJazz = "salutejazz"
@@ -92,10 +93,13 @@ const (
 	privateTargetsEnv = "OLCRTC_TEST_ALLOW_PRIVATE_TARGETS"
 )
 
-// localProviders is every provider the local target carries, in the order a
-// default run walks them (-olcrtc.gate-providers).
+// localProviders is the providers a default run walks, in order
+// (-olcrtc.gate-providers). It is every provider the local target carries
+// but WB Stream: the service closed its beta to its own staff on 2026-10-10
+// and answers every join of ours 401, so its cells can only fail. It is still
+// carried, for the day that changes, and walked when named.
 func localProviders() []string {
-	return []string{providerJitsi, providerTelemost, providerWBStream, providerSaluteJazz, providerVKCalls}
+	return []string{providerJitsi, providerTelemost, providerMTSLink, providerSaluteJazz, providerVKCalls}
 }
 
 // transportsOf is which transports a provider carries (amendment A1, the
@@ -117,6 +121,11 @@ func transportsOf(provider string) []string {
 		// spike), so the codec-agnostic videochannel is the proven lane;
 		// vp8channel rides the same publish slot.
 		return []string{transportVP8, transportVideo}
+	case providerMTSLink:
+		// The SFU relays no data between guests and forwards VP9 and H264,
+		// never VP8: vp8channel dresses its frames for it, the other video
+		// transports publish what it does not take.
+		return []string{transportVP8}
 	case providerSaluteJazz:
 		return []string{transportData}
 	default:
@@ -135,6 +144,7 @@ type LocalOptions struct {
 	TelemostRooms []string // pool: bare ids or room URLs
 	WBStreamRooms []string // pool: bare ids or room URLs
 	VKCallsRooms  []string // pool: VK Calls join links
+	MTSLinkRooms  []string // pool: MTS Link event join links
 	// WBStreamToken is the WB account token the server joins with; the
 	// client stays a guest, as the app is. From EnvWBStreamToken.
 	WBStreamToken string
@@ -377,6 +387,14 @@ func (t *LocalTarget) room(ctx context.Context, provider string) (string, error)
 		link, err := PoolRoom(t.opts.VKCallsRooms, t.opts.RunNumber)
 		if err != nil {
 			return "", fmt.Errorf("vkcalls: %w", err)
+		}
+		return link, nil
+	case providerMTSLink:
+		// The pool entries are the event join links the provider reads
+		// (my.mts-link.ru/j/<owner>/<event>), taken verbatim.
+		link, err := PoolRoom(t.opts.MTSLinkRooms, t.opts.RunNumber)
+		if err != nil {
+			return "", fmt.Errorf("mtslink: %w", err)
 		}
 		return link, nil
 	default:

@@ -257,6 +257,19 @@ func lastSegment(s string) string {
 	return s[strings.LastIndexByte(s, '/')+1:]
 }
 
+// mtsLinkOwner is the account an MTS Link room belongs to: the room is
+// ".../j/<owner>/<event>", its last segment the event and the one before it
+// the owner. It is empty for another provider's room.
+func mtsLinkOwner(provider, room string) string {
+	if provider != providerMTSLink {
+		return ""
+	}
+	room, _, _ = strings.Cut(room, "#")
+	room, _, _ = strings.Cut(room, "?")
+	room = strings.TrimRight(room, "/")
+	return lastSegment(strings.TrimSuffix(room, "/"+lastSegment(room)))
+}
+
 // Secrets lists what of the endpoint must never leave a run: the room as
 // given; its last path segment, as it is and cut at a query or a fragment,
 // where each differs (the part the engine logs on its own, e.g. "joining
@@ -285,6 +298,9 @@ func (e Endpoint) Secrets() []string {
 				}
 			}
 		}
+	}
+	if owner := mtsLinkOwner(e.Provider, e.Room); owner != "" && !slices.Contains(out, owner) {
+		out = append(out, owner)
 	}
 	for _, s := range []string{e.Key, e.Channel} {
 		if s != "" {

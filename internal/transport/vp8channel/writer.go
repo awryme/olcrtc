@@ -15,6 +15,9 @@ type writerState struct {
 	idleTicks           int
 	forceKeepaliveEvery int
 	ticksSinceKeepalive int
+	// keyframeGap is the fewest ticks between two keyframes a relay asked
+	// for: one that takes none of them asks without end.
+	keyframeGap int
 	// pendingControl holds a control frame that failed WriteSample and must be
 	// retried on the next tick before consuming more frames.
 	pendingControl *packetBuffer
@@ -33,6 +36,7 @@ func newWriterState(p *streamTransport) *writerState {
 		p:                   p,
 		keepaliveEvery:      max(int(keepaliveIdlePeriod/p.frameInterval), 1),
 		forceKeepaliveEvery: max(int(forceKeepalivePeriod/p.frameInterval), 1),
+		keyframeGap:         max(int(keyframeRequestGap/p.frameInterval), 1),
 		data: dataLane{
 			out: p.data.out, acks: p.data.acks, conn: p.dataConn, window: p.dataWindow, name: "data",
 		},
@@ -65,8 +69,26 @@ func (w *writerState) writeSample(data []byte) bool {
 // VP8 payloader copies sample.Data into RTP payloads during Packetize, before
 // WriteSample returns, so the writer can release its packet buffer afterward.
 func (p *streamTransport) writeSampleLocked(data []byte) bool {
+	return p.writeLocked(data, false)
+}
+
+// writeKeyframeLocked writes a frame the relay has to count as a keyframe:
+// the periodic one that keeps it forwarding, and the answer to its request.
+// On the transport's own VP8 every frame is one already.
+func (p *streamTransport) writeKeyframeLocked(data []byte) bool {
+	return p.writeLocked(data, true)
+}
+
+func (p *streamTransport) writeLocked(data []byte, keyframe bool) bool {
 	p.writeMu.Lock()
 	defer p.writeMu.Unlock()
+	// A carrier that is not the transport's own VP8 re-heads the frame for
+	// its track. The payloader copies the sample before WriteSample returns,
+	// so one buffer serves every write.
+	if p.carrier != nil && p.carrier.dress != nil {
+		p.dressBuf = p.carrier.dress(p.dressBuf, data, keyframe)
+		data = p.dressBuf
+	}
 	// ai-generated: the charge and the written result (olcrtc#26). Every
 	// sample this transport publishes passes here, so this is where the rate
 	// the relay sees is counted - control frames and keepalives included,
@@ -99,12 +121,31 @@ func (p *streamTransport) readyToSend(frame []byte) bool {
 // and, receiving none within its decode-timeout (~40 s), stops forwarding the
 // track to subscribers. The periodic bare keyframe keeps the SFU's decoder
 // satisfied.
+//
+// A relay that asks for one (requestKeyframe) is answered on the next tick
+// rather than at the next beat, keyframeGap ticks after the last at the
+// soonest: until it has a keyframe it forwards nothing of the track.
 func (w *writerState) forceKeepalive() {
 	w.ticksSinceKeepalive++
-	if w.ticksSinceKeepalive >= w.forceKeepaliveEvery {
-		w.ticksSinceKeepalive = 0
-		hdr := w.p.epochHeader()
-		_ = w.writeSample(hdr[:])
+	due := w.ticksSinceKeepalive >= w.forceKeepaliveEvery
+	if !due && w.ticksSinceKeepalive >= w.keyframeGap && w.p.keyframeWanted.Load() {
+		due = true
+	}
+	if !due {
+		return
+	}
+	w.p.keyframeWanted.Store(false)
+	w.ticksSinceKeepalive = 0
+	hdr := w.p.epochHeader()
+	_ = w.p.writeKeyframeLocked(hdr[:])
+}
+
+// requestKeyframe is the relay asking for a keyframe. Only a carrier whose
+// relay asks this way answers; on the others the two-second beat is all there
+// is, as before.
+func (p *streamTransport) requestKeyframe() {
+	if p.carrier.answersKeyframeRequests() {
+		p.keyframeWanted.Store(true)
 	}
 }
 

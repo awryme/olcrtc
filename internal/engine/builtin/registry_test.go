@@ -45,3 +45,16 @@ func TestSaluteJazzRegistered(t *testing.T) {
 		t.Errorf("engine.Available() = %v, want it to contain %q", got, "salutejazz")
 	}
 }
+
+// mtslink rides the same guarantee: auth provider and engine wired in every
+// build, the lean one included.
+func TestMtsLinkRegistered(t *testing.T) {
+	builtin.RegisterDefaults()
+
+	if got := builtin.Available(); !slices.Contains(got, "mtslink") {
+		t.Errorf("builtin.Available() = %v, want it to contain %q", got, "mtslink")
+	}
+	if got := engine.Available(); !slices.Contains(got, "mtslink") {
+		t.Errorf("engine.Available() = %v, want it to contain %q", got, "mtslink")
+	}
+}
